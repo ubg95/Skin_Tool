@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Minecraft Skin Head Tool</title>
+  <link rel="icon" href="Logo.png" type="image/png">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 500px; }
+    img { image-rendering: pixelated; width: 256px; height: 256px; margin-top: 20px; display: block; }
+    #downloadBtn {
+      margin-top: 10px;
+      padding: 8px 16px;
+      font-size: 16px;
+      cursor: pointer;
+      display: none;
+    }
+    label { display: block; margin-top: 10px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h2>Minecraft Skin Head Tool</h2>
+
+  <label>
+    <input type="radio" name="mode" value="replace" checked />
+    Replace body (keep head from uploaded skin)
+  </label>
+  <label>
+    <input type="radio" name="mode" value="remove" />
+    Remove head from skin
+  </label>
+
+  <div id="replaceInputs">
+    <label>Original Skin (keep full head): <input type="file" id="originalSkin" accept="image/png" /></label>
+  </div>
+
+  <div id="removeInputs" class="hidden">
+    <label>Choose Skin to remove head from: <input type="file" id="skinFile" accept="image/png" /></label>
+  </div>
+
+  <button id="processBtn">Run</button>
+
+  <div>
+    <h3>Result:</h3>
+    <img id="resultImg" alt="Result Skin" />
+    <button id="downloadBtn">Download Result</button>
+  </div>
+
+<script>
+  const newSkinDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAeFBMVEUAAAAAAAAVYVoZYlweZ2Efa2QjbGYkcGkocWspdW4tdnAuLi4uenMye3Uzf3g3gHo4hH04hXw5S1E8kIg8kYc9T1dYRT5ZRj9iT0ZjUEdpgYZyW1FzW1F0XFKEZ13CurXExMTT09Pf39/m5ubv7e36z677z678z64/uQoGAAAAAXRSTlMAQObYZgAAAq1JREFUWMPVlot22yAMhsnNGN+3bqF0hTRxSd7/DScBSh3HF+Js52x/fQrC5gtIIGAsSJKUVPBIdiep5UDr12ulQUrCZxqeYYCeBAABf9soA48a6j6JgO7GIGI5wIAQYEELANcpWKflU7BBjztRYvikfBgglQ8+xR8f07WZCyqUEGj4p5mLsauCocMC0i7+xpcmlG49uIr/BAC/fKPW+uoTfAfuh/gjwCg03KAMxAUaowDQSanLxdrzxa0D+MMFpV2FphBGqMPQbwHwoVqtrF2tEIDOVPeAvTbsfRAAy8fI14+f1n7/ePVDB0aYAvl6z9g7lHs9tMekPO/l55u1b59yfw7OG91UvYXlw3UGgQ8uFyiv4RzZ1gMSoCOoa3dF7RVocJHdA9YgIXgQtbftOKC9AazX1gIB+h4OzwBAh8PcFHac73YAaDnHDjuBJQGgTtNo2rZpmqoqiqqCSnMFuBdJkrWbzXabJI0DVNB5XTmAKJzENKCusyxNs6yuAwBbCYAD/xcA1emEZYFzQsQ84Ft7ihpBhcEtyzRNkjQty8p5vsDWgru686LgzctL/BRuAH4EjwEGnTgJyPPlgBx1POak0AmnEAc49uQ6CQQID/BOFLanuw3V3UyL9B8DMB/wjrns55OEMZ8PRj/xeyHUm/6LjrkMUJNV/z2AzweUXOM8cxodTfdnfD4gqxxl+73wjA8mAewJQKymARGreBTQzwfubAxHZL8evZn6x/3ovSAW8ANC/RCg/dOAmClwd0/A4XPeAmAX7g2C0nA42e5X6naz8fnA54Ut2G0G94Rwb9gOAsi+2R9hRdIBQydWJIA6/AVAuBCE60EAkD3kzagR0DC+jLKivED3BLo3ECAcjdcpdLZGnA9mAOxpwK0P8vxBQCcf9O8Ls4DjjObuBb8B2yGop/phIowAAAAASUVORK5CYII=";
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  function copyArea(srcCtx, destCtx, x, y, width, height) {
+    const imgData = srcCtx.getImageData(x, y, width, height);
+    destCtx.putImageData(imgData, x, y);
+  }
+
+  const modeRadios = document.querySelectorAll('input[name="mode"]');
+  const replaceInputs = document.getElementById('replaceInputs');
+  const removeInputs = document.getElementById('removeInputs');
+  const processBtn = document.getElementById('processBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const resultImg = document.getElementById('resultImg');
+  let lastDataUrl = '';
+
+  // Mode switcher
+  modeRadios.forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.checked) {
+        if (radio.value === 'replace') {
+          replaceInputs.classList.remove('hidden');
+          removeInputs.classList.add('hidden');
+          downloadBtn.textContent = 'Download Combined Skin';
+          resultImg.alt = 'Combined Skin';
+        } else {
+          replaceInputs.classList.add('hidden');
+          removeInputs.classList.remove('hidden');
+          downloadBtn.textContent = 'Download Skin without Head';
+          resultImg.alt = 'Skin without Head';
+        }
+        resultImg.src = '';
+        downloadBtn.style.display = 'none';
+      }
+    });
+  });
+
+  processBtn.addEventListener('click', async () => {
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    try {
+      if (mode === 'replace') {
+        const originalFile = document.getElementById('originalSkin').files[0];
+        if (!originalFile) {
+          alert('Please select the original skin.');
+          return;
+        }
+
+        const [originalImg, newImg] = await Promise.all([
+          loadImage(URL.createObjectURL(originalFile)),
+          loadImage(newSkinDataUrl)
+        ]);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+
+        const origCanvas = document.createElement('canvas');
+        origCanvas.width = 64;
+        origCanvas.height = 64;
+        const origCtx = origCanvas.getContext('2d');
+        origCtx.drawImage(originalImg, 0, 0);
+
+        ctx.drawImage(newImg, 0, 0);
+
+        const headAreas = [
+          { x: 8, y: 8, width: 8, height: 8 }, { x: 24, y: 8, width: 8, height: 8 },
+          { x: 0, y: 8, width: 8, height: 8 }, { x: 16, y: 8, width: 8, height: 8 },
+          { x: 8, y: 0, width: 8, height: 8 }, { x: 16, y: 0, width: 8, height: 8 },
+          { x: 40, y: 8, width: 8, height: 8 }, { x: 56, y: 8, width: 8, height: 8 },
+          { x: 32, y: 8, width: 8, height: 8 }, { x: 48, y: 8, width: 8, height: 8 },
+          { x: 40, y: 0, width: 8, height: 8 }, { x: 48, y: 0, width: 8, height: 8 }
+        ];
+
+        headAreas.forEach(({ x, y, width, height }) => {
+          copyArea(origCtx, ctx, x, y, width, height);
+        });
+
+        lastDataUrl = canvas.toDataURL();
+        resultImg.src = lastDataUrl;
+        downloadBtn.style.display = 'inline-block';
+
+      } else {
+        const file = document.getElementById('skinFile').files[0];
+        if (!file) {
+          alert('Please select a skin PNG file.');
+          return;
+        }
+        const img = await loadImage(URL.createObjectURL(file));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        const headAreas = [
+          { x: 8, y: 8, width: 8, height: 8 }, { x: 24, y: 8, width: 8, height: 8 },
+          { x: 0, y: 8, width: 8, height: 8 }, { x: 16, y: 8, width: 8, height: 8 },
+          { x: 8, y: 0, width: 8, height: 8 }, { x: 16, y: 0, width: 8, height: 8 },
+          { x: 40, y: 8, width: 8, height: 8 }, { x: 56, y: 8, width: 8, height: 8 },
+          { x: 32, y: 8, width: 8, height: 8 }, { x: 48, y: 8, width: 8, height: 8 },
+          { x: 40, y: 0, width: 8, height: 8 }, { x: 48, y: 0, width: 8, height: 8 }
+        ];
+
+        headAreas.forEach(({ x, y, width, height }) => {
+          const imgData = ctx.getImageData(x, y, width, height);
+          for (let i = 0; i < imgData.data.length; i += 4) {
+            imgData.data[i + 3] = 0;
+          }
+          ctx.putImageData(imgData, x, y);
+        });
+
+        lastDataUrl = canvas.toDataURL();
+        resultImg.src = lastDataUrl;
+        downloadBtn.style.display = 'inline-block';
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!lastDataUrl) return;
+    const a = document.createElement('a');
+    a.href = lastDataUrl;
+    a.download = (document.querySelector('input[name="mode"]:checked').value === 'replace')
+      ? 'combined_skin.png'
+      : 'skin_without_head.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+</script>
+</body>
+</html>
